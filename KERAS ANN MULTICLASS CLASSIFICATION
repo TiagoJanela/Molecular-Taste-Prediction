@@ -1,0 +1,190 @@
+# multi-class classification with Keras
+import pandas as pd
+import tensorflow as tf
+import keras
+from tensorflow.keras import backend
+from tensorflow.keras import layers
+from keras.wrappers.scikit_learn import KerasClassifier
+from keras.utils import np_utils
+from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import KFold
+from sklearn.preprocessing import LabelEncoder
+from sklearn.pipeline import Pipeline
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.tree import export_graphviz
+from sklearn import metrics
+import pickle
+from sklearn.model_selection import train_test_split
+from numpy import array
+from numpy import argmax
+import scipy.sparse as sparse
+from keras.models import Sequential
+from keras.layers import Dropout, Dense
+from tensorflow.keras.callbacks import EarlyStopping
+# confirm TensorFlow sees the GPU
+
+
+pathdB = 'T:/OneDrive - Universidade de Lisboa/TRABALHO DE CAMPO/IMPORTANT DB/'
+path_results = "T:/OneDrive - Universidade de Lisboa/TRABALHO DE CAMPO/RESULTS_MODEL/"
+path_metrics = "T:/OneDrive - Universidade de Lisboa/TRABALHO DE CAMPO/RESULTS_MODEL/Metrics/"
+
+filename_dB = "AS_S_database_Python_v2.xlsx"
+filename_dB_normalized = "AS_S_database_Python_v2_norm.xlsx"
+filename_dB_Label_binarized = "AS_S_database_Python_v2_Label_binarized.xlsx"
+filenameTR_pred = "TR_ANN.xlsx"
+filenameTE_pred = "TE_ANN.xlsx"
+filenameTR_metrics = "TR_ANN_metrics.xlsx"
+filenameTE_metrics = "TE_ANN_metrics.xlsx"
+
+# load data Norm and Labelbin
+
+features_norm = pd.read_excel(path_results + filename_dB_normalized)
+
+labels_bin = features_norm['TASTE']
+labels_bin_drop = features_norm.drop("TASTE", axis=1, inplace=True)
+
+mol_name_norm = features_norm["MOL_NAME"]
+mol_name_Norm_drop = features_norm.drop("MOL_NAME", axis=1, inplace=True)
+
+# create training and testing vars
+from sklearn.model_selection import train_test_split
+
+features_normalized_train, features_normalized_test, labels_train, labels_test, mol_name_train, mol_name_test = train_test_split(
+    features_norm, labels_bin, mol_name_norm, test_size=0.2, stratify=labels_bin)
+print(features_normalized_train.shape, labels_train.shape)
+print(features_normalized_test.shape, labels_test.shape)
+
+from sklearn.preprocessing import LabelBinarizer
+
+labels_train = array(labels_train)
+labels_test = array(labels_test)
+
+lb = LabelBinarizer()
+
+labels_train_binerized = lb.fit_transform(labels_train)
+labels_test_binerized = lb.fit_transform(labels_test)
+
+# ANN
+
+
+input_size = 926
+hidden_neurons_L1 = 46
+hidden_neurons_L2 = 28
+hidden_neurons_L3 = 3
+
+batch_size = 10
+epochs = 100
+tf.keras.optimizers.Adam(learning_rate=0.01, beta_1=0.9, beta_2=0.999, epsilon=1e-07, amsgrad=False,
+                         name='Adam')  # default
+
+# Initialising ANN
+def build_model():
+    model = keras.models.Sequential()
+
+    # Adding the input layer and first hidden layer
+    model.add(keras.layers.Dense(units=hidden_neurons_L1,
+                                 activation='relu',
+                                 input_dim=input_size,
+                                 kernel_initializer="uniform"))  # rectifier activation function, include all input with one hot encoding
+
+    # Adding the Output Layer
+    model.add(keras.layers.Dense(units=hidden_neurons_L2, activation='relu',
+                                 kernel_initializer="uniform"))
+
+    # Adding the Output Layer
+    model.add(keras.layers.Dense(units=hidden_neurons_L3, activation='softmax',
+                                 kernel_initializer="uniform"))  # Use Softmax for Multiclass Classifier in the Last Layer
+
+    # Compiling ANN - stochastic gradient descent
+    model.compile(optimizer="Adam",
+                  loss='categorical_crossentropy',
+                  metrics=['accuracy'],
+                  )  # stochastic gradient descent/ Metrics as accuracy only gives the overall performance of the model, not the performance of each class
+
+    return model
+
+model = build_model()
+
+# Fit ANN to training set
+model.fit(features_normalized_train, labels_train_binerized,
+          batch_size=batch_size,
+          epochs=epochs,
+          validation_split=0.10
+          )  # original batch is 10 and epoch is 100
+
+# Predicting the Train set rules
+pred_train = model.predict(features_normalized_train)
+pred_train_aprox = np.argmax(pred_train, axis=-1)  # greater than 0.50 on scale 0 to 1
+Labels_train_aprox = np.argmax(labels_train_binerized, axis=-1)
+# print(pred_test)
+
+# Results_TR
+
+label_original_TR = lb.inverse_transform(labels_train_binerized)
+
+TR_results = pd.DataFrame(
+    list(zip(mol_name_train, labels_train_binerized, pred_train, pred_train_aprox, label_original_TR)),
+    columns=["Mol_Names", "Observed_TR", "Predicted_TR", "Predicted CLASS",
+             "Original_LABEL"])  # gives me the predicted value,the actual value for train
+
+print(TR_results)
+
+export_excel_TR = TR_results.to_excel(path_results + filenameTR_pred, index=None, header=True)
+
+# Making confusion matrix that checks accuracy of the model
+from sklearn.metrics import confusion_matrix
+
+cm_TR = confusion_matrix(Labels_train_aprox, pred_train_aprox)
+print(cm_TR)
+
+# CLASSIFICATION REPORT WITH PRECISION, RECALL AND F1-SCORE - TR
+target_names = ["BITTER", "SWEET", "TASTELESS"]
+Metrics_TR = metrics.classification_report(Labels_train_aprox, pred_train_aprox, digits=3, output_dict=True,
+                                           target_names=target_names)
+
+# Transpose metrics to panda.DF
+df_TR_metrics = pd.DataFrame(Metrics_TR).transpose()
+print(df_TR_metrics)
+# Export TR metrics
+export_excel_TR_metrics = df_TR_metrics.to_excel(path_metrics + filenameTR_metrics, index=True, header=True)
+
+# TE
+
+# Predicting the Test set rules
+pred_test = model.predict(features_normalized_test)
+pred_test_aprox = np.argmax(pred_test, axis=-1)  # greater than 0.50 on scale 0 to 1
+Labels_test_aprox = np.argmax(labels_test_binerized, axis=-1)
+# print(pred_test)
+
+# Retrieves the original label from the binerizer
+label_original_TE = lb.inverse_transform(labels_test_binerized)
+
+# label_pred_TE = pd.DataFrame(pred_test_aprox)
+# original_labels_TE = {0:"BITTER", 1:"SWEET", 2:"TASTELESS"}
+# label_pred_TE["original_labels_TE"] = label_pred_TE.map(original_labels_TE)
+
+
+TE_results = pd.DataFrame(
+    list(zip(mol_name_test, labels_test_binerized, pred_test, pred_test_aprox, label_original_TE)),
+    columns=["Mol_Names", "Observed_TE", "Predicted_TE", "Predicted CLASS",
+             "Original_LABEL"])  # gives me the predicted value,the actual value for train
+
+print(TE_results)
+
+export_excel_TE = TE_results.to_excel(path_results + filenameTE_pred, index=True, header=True)
+
+# Making confusion matrix that checks accuracy of the model
+cm_TE = confusion_matrix(Labels_test_aprox, pred_test_aprox)
+print(cm_TE)
+
+# CLASSIFICATION REPORT WITH PRECISION, RECALL AND F1-SCORE - TE
+Metrics_TE = metrics.classification_report(Labels_test_aprox, pred_test_aprox, digits=3, output_dict=True,
+                                           target_names=target_names)
+
+# Transpose metrics to panda.DF
+df_TE_metrics = pd.DataFrame(Metrics_TE).transpose()
+print(df_TE_metrics)
+# Export TE metrics
+export_excel_TE_metrics = df_TE_metrics.to_excel(path_metrics + filenameTE_metrics, index=None, header=True)
