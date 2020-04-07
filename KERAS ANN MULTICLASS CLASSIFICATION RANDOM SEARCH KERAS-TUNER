@@ -1,0 +1,145 @@
+# multi-class classification with Keras
+import pandas as pd
+import tensorflow as tf
+import keras
+from tensorflow.keras import backend
+from keras.wrappers.scikit_learn import KerasClassifier
+from keras.utils import np_utils
+from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import KFold
+from sklearn.preprocessing import LabelEncoder
+from sklearn.pipeline import Pipeline
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.tree import export_graphviz
+from sklearn import metrics
+import pickle
+from sklearn.model_selection import train_test_split
+from numpy import array
+from numpy import argmax
+import scipy.sparse as sparse
+from keras.models import Sequential
+from keras.layers import Dropout, Dense
+from pandas import ExcelWriter
+from openpyxl import load_workbook
+import openpyxl
+from openpyxl import Workbook
+import xlwings as xw
+from kerastuner.tuners import RandomSearch
+from tensorflow import keras
+from kerastuner.engine.hyperparameters import HyperParameters
+import time
+
+LOG_DIR = f"{int(time.time())}"
+
+# confirm TensorFlow sees the GPU
+
+pathmodel = "T:/OneDrive - Universidade de Lisboa/TRABALHO DE CAMPO/RESULTS_MODEL/"
+
+pathdB='T:/OneDrive - Universidade de Lisboa/TRABALHO DE CAMPO/IMPORTANT DB/'
+path_results = "T:/OneDrive - Universidade de Lisboa/TRABALHO DE CAMPO/RESULTS_MODEL/"
+path_metrics = "T:/OneDrive - Universidade de Lisboa/TRABALHO DE CAMPO/RESULTS_MODEL/Metrics/"
+
+filename_dB = "AS_S_database_Python_v2.xlsx"
+filename_dB_normalized = "AS_S_database_Python_v2_norm.xlsx"
+filename_dB_Label_binarized = "AS_S_database_Python_v2_Label_binarized.xlsx"
+filenameTR_pred="TR_ANN_HP.xlsx"
+filenameVAL_pred= "VAL_ANN_HP.xlsx"
+filenameTR_metrics="TR_ANN_HP_metrics.xlsx"
+filenameVAL_metrics="VAL_ANN_HP_metrics.xlsx"
+
+# load data Norm and Labelbin
+
+features_norm = pd.read_excel(path_results+filename_dB_normalized)
+
+
+labels_bin = features_norm['TASTE']
+labels_bin_drop = features_norm.drop("TASTE", axis=1, inplace=True)
+
+
+mol_name_norm = features_norm["MOL_NAME"]
+mol_name_Norm_drop = features_norm.drop("MOL_NAME", axis=1, inplace=True)
+
+# create training and testing vars
+from sklearn.model_selection import train_test_split
+
+features_normalized_train, features_normalized_test, labels_train, labels_test, mol_name_train, mol_name_test = train_test_split(features_norm, labels_bin, mol_name_norm, test_size=0.2, stratify=labels_bin)
+print (features_normalized_train.shape, labels_train.shape)
+print (features_normalized_test.shape, labels_test.shape)
+
+features_norm_train, features_normalized_val, labels_train_, labels_val, mol_name_train_, mol_name_val = train_test_split(features_normalized_train, labels_train, mol_name_train, test_size=0.25, stratify = labels_train)
+print (features_normalized_val.shape, labels_val.shape)
+
+from sklearn.preprocessing import LabelBinarizer
+
+labels_train_= array(labels_train_)
+labels_test= array(labels_test)
+labels_val= array(labels_val)
+
+lb = LabelBinarizer()
+
+labels_train_binerized = lb.fit_transform(labels_train_)
+labels_test_binerized = lb.fit_transform(labels_test)
+labels_val_binerized = lb.fit_transform(labels_val)
+
+#Retrieves the original label from the binerizer
+Labels_train_aprox = np.argmax(labels_train_binerized, axis=-1)
+Labels_val_aprox = np.argmax(labels_val_binerized, axis=-1)
+label_original_TR = lb.inverse_transform(labels_train_binerized)
+label_original_val = lb.inverse_transform(labels_val_binerized)
+
+
+# Initialising ANN
+def build_model(hp): # random search passes this hyperparameter() object
+    model = keras.models.Sequential()
+    activation = hp.Choice('activation',
+                           [   'softmax',
+                               'softplus',
+                               'softsign',
+                               'relu',
+                               'tanh',
+                               'sigmoid',
+                               'hard_sigmoid',
+                               'linear'
+                           ])
+    # Adding the input layer and first hidden layer
+    model.add(keras.layers.Dense(units= hp.Int("input_units", min_value=10, max_value=50, step=2),
+                                 activation=activation,
+                                 input_dim= 926
+                                 ))  # rectifier activation function, include all input with one hot encoding
+
+    for i in range(hp.Int("n_layers", 1,2)): # adding variation of layers
+        model.add(keras.layers.Dense(units=hp.Int(f"dense_{i}_units", min_value=10, max_value=50, step=2), activation='relu'
+                                     ))
+
+    optimizer = hp.Choice('optimizer', ['adam', 'sgd', 'rmsprop',"Adagrad","Adadelta","Adamax","Nadam"])
+    # Adding the Output Layer
+    model.add(keras.layers.Dense(units=3, activation='softmax'))  # Use Softmax for Multiclass Classifier in the Last Layer
+
+    # Compiling ANN - stochastic gradient descent
+    model.compile(optimizer=optimizer,
+                  loss='categorical_crossentropy',
+                  metrics=['accuracy'])  # stochastic gradient descent/ Metrics as accuracy only gives the overall performance of the model, not the performance of each class
+
+
+    return model
+
+tuner = RandomSearch(
+    build_model,
+    objective= "val_accuracy",
+    max_trials = 10, #how many combination we wanna have tested
+    executions_per_trial = 2, #best performance = 5 runs the same model 5x
+    directory = LOG_DIR
+)
+
+tuner.search(x=features_norm_train,
+             y=labels_train_binerized,
+             epochs=100,
+             batch_size=10,
+             validation_data = (features_normalized_val, labels_val_binerized)
+             )
+
+print (tuner.get_best_hyperparameters()[0].values)
+print(tuner.results_summary())
+print(tuner.get_best_models()[0].summary())
