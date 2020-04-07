@@ -1,0 +1,295 @@
+# multi-class classification with Keras
+import pandas as pd
+import tensorflow as tf
+import keras
+from tensorflow.keras import backend
+from keras.wrappers.scikit_learn import KerasClassifier
+from keras.utils import np_utils
+from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import KFold
+from sklearn.preprocessing import LabelEncoder
+from sklearn.pipeline import Pipeline
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.tree import export_graphviz
+from sklearn import metrics
+import pickle
+from sklearn.model_selection import train_test_split
+from numpy import array
+from numpy import argmax
+import scipy.sparse as sparse
+from keras.models import Sequential
+from keras.layers import Dropout, Dense
+from pandas import ExcelWriter
+from openpyxl import load_workbook
+import openpyxl
+from openpyxl import Workbook
+import xlwings as xw
+
+# fix random seed for reproducibility
+import random as rn
+np.random.seed(42)
+rn.seed(12345)
+
+
+# confirm TensorFlow sees the GPU
+pathmodel = "T:/OneDrive - Universidade de Lisboa/TRABALHO DE CAMPO/RESULTS_MODEL/"
+
+pathdB = 'T:/OneDrive - Universidade de Lisboa/TRABALHO DE CAMPO/RESULTS_MODEL/HT_dB/'
+path_results = "T:/OneDrive - Universidade de Lisboa/TRABALHO DE CAMPO/RESULTS_MODEL/HT_results/"
+path_metrics = "T:/OneDrive - Universidade de Lisboa/TRABALHO DE CAMPO/RESULTS_MODEL/HT_metrics/"
+
+
+filename_dB_normalized = "AS_S_database_Python_v2_norm.xlsx"
+filename_dB_Label_binarized = "AS_S_database_Python_v2_Label_binarized.xlsx"
+filenameTR_pred = "TR_ANN_HP.xlsx"
+filenameVAL_pred = "VAL_ANN_HP.xlsx"
+filenameTR_metrics = "TR_ANN_HP_metrics.xlsx"
+filenameVAL_metrics = "VAL_ANN_HP_metrics.xlsx"
+
+# load data Norm and Labelbin
+
+features_norm = pd.read_excel(pathdB + filename_dB_normalized)
+
+labels_bin = features_norm['TASTE']
+labels_bin_drop = features_norm.drop("TASTE", axis=1, inplace=True)
+
+mol_name_norm = features_norm["MOL_NAME"]
+mol_name_Norm_drop = features_norm.drop("MOL_NAME", axis=1, inplace=True)
+
+# create training and testing vars
+from sklearn.model_selection import train_test_split
+
+features_normalized_train, features_normalized_test, labels_train, labels_test, mol_name_train, mol_name_test = train_test_split(
+    features_norm, labels_bin, mol_name_norm, test_size=0.2, stratify=labels_bin, random_state=42)
+print(features_normalized_train.shape, labels_train.shape)
+print(features_normalized_test.shape, labels_test.shape)
+
+features_norm_train, features_normalized_val, labels_train_, labels_val, mol_name_train_, mol_name_val = train_test_split(
+    features_normalized_train, labels_train, mol_name_train, test_size=0.25, stratify=labels_train, random_state=42)
+print(features_normalized_val.shape, labels_val.shape)
+
+from sklearn.preprocessing import LabelBinarizer
+
+labels_train_ = array(labels_train_)
+labels_test = array(labels_test)
+labels_val = array(labels_val)
+
+lb = LabelBinarizer()
+
+labels_train_binerized = lb.fit_transform(labels_train_)
+labels_test_binerized = lb.fit_transform(labels_test)
+labels_val_binerized = lb.fit_transform(labels_val)
+
+# Retrieves the original label from the binerizer
+Labels_train_aprox = np.argmax(labels_train_binerized, axis=-1)
+Labels_val_aprox = np.argmax(labels_val_binerized, axis=-1)
+label_original_TR = lb.inverse_transform(labels_train_binerized)
+label_original_val = lb.inverse_transform(labels_val_binerized)
+
+startrowTR_2L = 1
+startrowVAL_2L = 1
+startrow_PRED_TR_2L = 0
+startrow_PRED_VAL_2L = 0
+startcol_PRED_TR_2L = 2
+startcol_PRED_VAL_2L = 2
+
+filenameTR_metrics_init_2L = "KANN_TR_metrics_2L.xlsx"
+filenameVAL_metrics_init_2L = "KANN_VAL_metrics_2L.xlsx"
+filenameTR_PRED_init_2L = "KANN_TR_HT_2L.xlsx"
+filenameVAL_PRED_init_2L = "KANN_VAL_HT_2L.xlsx"
+
+input_size = 926
+hidden_neurons_l1 = [10]
+hidden_neurons_l2 = [10]
+hidden_neurons_LastL = [3]
+activation = ['relu','softmax']
+activation_LastL = ["softmax"]
+optimizer = ['Adam']
+batch_size = [10, 50, 100]
+epochs = [10, 20, 40, 60, 80, 100]
+
+
+
+
+# input_size = 926
+# hidden_neurons_L1 = [1,10,20,30,50]
+# hidden_neurons_L2 = [1,10,20,30,50]
+# hidden_neurons_LastL = [3]
+# activation = ['relu','softmax', 'softplus', 'softsign', 'tanh', 'sigmoid', 'hard_sigmoid', 'linear']
+# activation_LastL = ["softmax"]
+# optimizer = ['Adam','SGD', 'RMSprop', 'Adagrad', 'Adadelta','Adamax', 'Nadam']
+# batch_size = [10, 20, 50, 100]
+# epochs = [5, 10, 50]
+# kernel_initializer_L1= ["uniform"]
+# kernel_initializer_L2 = ["uniform"]
+# kernel_initializer_LastL = ["uniform"]
+
+with pd.ExcelWriter(path_metrics + filenameTR_metrics_init_2L) as writerTR_2L:
+    with pd.ExcelWriter(path_metrics + filenameVAL_metrics_init_2L) as writerVAL_2L:
+        with pd.ExcelWriter(path_results + filenameTR_PRED_init_2L) as writer_TR_PRED_2L:
+            with pd.ExcelWriter(path_results + filenameVAL_PRED_init_2L) as writer_VAL_PRED_2L:
+                for _hidden_neurons_l1 in hidden_neurons_l1:
+                    for _hidden_neurons_l2 in hidden_neurons_l2:
+                        for _activation in activation:
+                            for _optimizer in optimizer:
+                                for _batch_size in batch_size:
+                                    for _epochs in epochs:
+                                        filesufix = str(_hidden_neurons_l1) + "_" + str(_hidden_neurons_l2) + "_" + str(
+                                        _activation) + "_" + str(_optimizer) + "_" + str(_batch_size) + "_" + str(
+                                        _epochs)
+
+                                        filenameTR_VAL_sufix = "" + filesufix + ""
+
+                                        filenameKANNmodel = 'KANN_' + filesufix + '.h5'
+                                        print('*************************')
+                                        print(_hidden_neurons_l1, " / ", _hidden_neurons_l2, " / ", _activation, " / ",
+                                              _optimizer, " / ", _batch_size, " / ", _epochs)
+
+                                        # Create the model //,
+                                        # Initialising ANN
+
+                                        def build_model():
+                                            model = keras.models.Sequential()
+
+                                            # Adding the input layer and first hidden layer
+                                            model.add(keras.layers.Dense(units=_hidden_neurons_l1,
+                                                                         activation=_activation,
+                                                                         input_dim=926
+                                                                         ))
+
+                                            # Adding the Output Layer
+                                            model.add(keras.layers.Dense(units=_hidden_neurons_l2,
+                                                                         activation=_activation
+                                                                         ))
+
+                                            # Adding the Output Layer
+                                            model.add(keras.layers.Dense(units=3,
+                                                                         activation="softmax"
+                                                                         ))  # Use Softmax for Multiclass Classifier in the Last Layer
+
+                                            # Compiling ANN - stochastic gradient descent
+                                            model.compile(optimizer=_optimizer,
+                                                      loss='categorical_crossentropy',
+                                                      metrics=['accuracy'])  # stochastic gradient descent/ Metrics as accuracy only gives the overall performance of the model, not the performance of each class
+                                            return model
+
+
+
+
+
+                                        model = build_model()
+
+                                        # Fit on training data
+                                        model.fit(features_norm_train, labels_train_binerized,
+                                                  batch_size=_batch_size,
+                                                  epochs=_epochs
+                                                  )
+
+                                        # Tells the model to predict the train
+                                        pred_train = model.predict(features_norm_train)
+                                        pred_train_aprox = np.argmax(pred_train,
+                                                                     axis=-1)  # greater than 0.50 on scale 0 to 1
+
+                                        # Export  TRAIN
+                                        TR_MOLN_TR_labels = pd.DataFrame(list(zip(mol_name_train_, label_original_TR)),
+                                                                         columns=["DRUG NAME", "OBSERVED TR"])
+
+                                        TR_results = pd.DataFrame(list(zip(pred_train_aprox)))
+
+                                        export_excel_TR = TR_results.to_excel(writer_TR_PRED_2L,
+                                                                              startrow=startrow_PRED_TR_2L,
+                                                                              startcol=startcol_PRED_TR_2L, index=False,
+                                                                              header=["" + filesufix + ""])
+
+                                        # Metrics_TR
+                                        # CLASSIFICATION REPORT WITH PRECISION, RECALL AND F1-SCORE - TR
+                                        target_names = ["BITTER", "SWEET", "TASTELESS"]
+
+                                        Metrics_TR = metrics.classification_report(Labels_train_aprox, pred_train_aprox,
+                                                                                   digits=3, output_dict=True,
+                                                                                   target_names=target_names)
+
+                                        # Transpose metrics to panda.DF
+                                        df_TR_metrics = pd.DataFrame(Metrics_TR).transpose()
+                                        df_TR_metrics[""]= filesufix
+
+                                        # Export TR metrics
+                                        export_excel_TR_metrics = df_TR_metrics.to_excel(writerTR_2L, encoding='utf-8',
+                                                                                         startrow=startrowTR_2L,
+                                                                                         header=False)
+
+                                        # Tells the model to predict the Validation
+
+                                        pred_val = model.predict(features_normalized_val)
+                                        pred_val_aprox = np.argmax(pred_val, axis=-1) #greater than 0.50 on scale 0 to 1
+
+                                        # Export  TRAIN
+
+                                        VAL_MOLN_VAL_labels = pd.DataFrame(list(zip(mol_name_val,label_original_val)), columns=["DRUG NAME","OBSERVED VAL"])
+
+                                        VAL_results = pd.DataFrame(list(zip(pred_val_aprox)))
+
+                                        export_excelVAL = VAL_results.to_excel (writer_VAL_PRED_2L, startrow=startrow_PRED_VAL_2L, startcol=startcol_PRED_VAL_2L, index = False, header= ["" + filesufix + ""])
+
+                                        #Metrics_VAL
+
+                                        # CLASSIFICATION REPORT WITH PRECISION, RECALL AND F1-SCORE - VAL
+
+                                        target_names=["BITTER", "SWEET", "TASTELESS"]
+
+                                        Metrics_VAL = metrics.classification_report(Labels_val_aprox, pred_val_aprox, digits=3, output_dict=True, target_names = target_names )
+
+                                        #Transpose metrics to panda.DF
+                                        df_VAL_metrics = pd.DataFrame(Metrics_VAL).transpose()
+                                        df_VAL_metrics[""] = filesufix
+                                        ##Export TR metrics
+                                        export_excel_VAL_metrics = df_VAL_metrics.to_excel (writerVAL_2L ,encoding='utf-8', startrow=startrowVAL_2L, header=False)
+
+                                        # Saves model
+
+                                        #model.save('KANN_' + filesufix + '.h5')
+
+                                        startrowTR_2L += 6
+                                        startrowVAL_2L += 6
+                                        startcol_PRED_TR_2L += 1
+                                        startcol_PRED_VAL_2L += 1
+
+print('******************* END **********************')
+print("END")
+
+# Places metric's names TR as header
+wb = load_workbook(path_metrics + filenameTR_metrics_init_2L)
+sheet = wb.active
+sheet.cell(row=1, column=2).value = 'Precision'
+sheet.cell(row=1, column=3).value = 'Recall'
+sheet.cell(row=1, column=4).value = 'F1_score'
+sheet.cell(row=1, column=5).value = 'support'
+wb.save(path_metrics + filenameTR_metrics_init_2L)
+
+# Places metric's names VAl as header
+
+wb = load_workbook(path_metrics + filenameVAL_metrics_init_2L)
+sheet = wb.active
+sheet.cell(row=1, column=2).value = 'Precision'
+sheet.cell(row=1, column=3).value = 'Recall'
+sheet.cell(row=1, column=4).value = 'F1_score'
+sheet.cell(row=1, column=5).value = 'support'
+wb.save(path_metrics + filenameVAL_metrics_init_2L)
+
+# Places the Drug Name and observed TR in XLS
+wb = xw.Book(path_results + filenameTR_PRED_init_2L)
+sht = wb.sheets['sheet1']
+sht.range("A1:B1").options(index=False, header=True).value = TR_MOLN_TR_labels
+wb.save(path_results + filenameTR_PRED_init_2L)
+# wb.close()
+
+# Places the Drug Name and observed VAL in XLS
+
+wb = xw.Book(path_results + filenameVAL_PRED_init_2L)
+sht = wb.sheets['sheet1']
+sht.range("A1:B1").options(index=False, header=True).value = VAL_MOLN_VAL_labels
+wb.save(path_results + filenameVAL_PRED_init_2L)
+
+# wb.close()
