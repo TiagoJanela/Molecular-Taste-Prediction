@@ -1,0 +1,197 @@
+# multi-class classification with Keras
+import pandas as pd
+import tensorflow as tf
+import keras
+from tensorflow.keras import backend
+from keras.wrappers.scikit_learn import KerasClassifier
+from keras.utils import np_utils
+from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import KFold
+from sklearn.preprocessing import LabelEncoder
+from sklearn.pipeline import Pipeline
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.tree import export_graphviz
+from sklearn import metrics
+import pickle
+from sklearn.model_selection import train_test_split
+from numpy import array
+from numpy import argmax
+import scipy.sparse as sparse
+from keras.models import Sequential
+from keras.layers import Dropout, Dense
+from pandas import ExcelWriter
+from openpyxl import load_workbook
+import openpyxl
+from openpyxl import Workbook
+import xlwings as xw
+import h5py
+
+# fix random seed for reproducibility
+import random as rn
+np.random.seed(42)
+rn.seed(12345)
+
+
+# confirm TensorFlow sees the GPU
+pathmodel = "T:/OneDrive - Universidade de Lisboa/TRABALHO DE CAMPO/RESULTS_MODEL/HT_saved_models/EDragon_dB/"
+
+pathdB = 'T:/OneDrive - Universidade de Lisboa/TRABALHO DE CAMPO/RESULTS_MODEL/HT_dB/EDragon_dB/'
+path_results = "T:/OneDrive - Universidade de Lisboa/TRABALHO DE CAMPO/RESULTS_MODEL/HT_results/EDragon_dB/"
+path_metrics = "T:/OneDrive - Universidade de Lisboa/TRABALHO DE CAMPO/RESULTS_MODEL/HT_metrics/EDragon_dB/"
+
+
+filename_dB_normalized = "EDragon_final_dB_Feature_red.xlsx"
+filenameTE_pred = "TE_ANN_HP.xlsx"
+filenameTE_metrics = "TE_ANN_metrics.xlsx"
+
+
+# load data Norm and Labelbin
+
+features_norm = pd.read_excel(pathdB + filename_dB_normalized)
+
+labels_bin = features_norm['TASTE']
+labels_bin_drop = features_norm.drop("TASTE", axis=1, inplace=True)
+
+mol_name_norm = features_norm["MOL_NAME"]
+mol_name_Norm_drop = features_norm.drop("MOL_NAME", axis=1, inplace=True)
+
+# create training and testing vars
+from sklearn.model_selection import train_test_split
+
+features_normalized_train, features_normalized_test, labels_train, labels_test, mol_name_train, mol_name_test = train_test_split(
+    features_norm, labels_bin, mol_name_norm, test_size=0.2, stratify=labels_bin, random_state=42)
+print(features_normalized_train.shape, labels_train.shape)
+print(features_normalized_test.shape, labels_test.shape)
+
+
+
+from sklearn.preprocessing import LabelBinarizer
+
+labels_test = array(labels_test)
+
+lb = LabelBinarizer()
+
+labels_test_binerized = lb.fit_transform(labels_test)
+
+
+# Retrieves the original label from the binerizer
+Labels_TE_aprox = np.argmax(labels_test_binerized, axis=-1)
+label_original_TE = lb.inverse_transform(labels_test_binerized)
+
+
+startrowTE_2L = 1
+startrow_PRED_TE_2L = 0
+startcol_PRED_TE_2L = 3
+
+
+filenameTE_metrics_init_2L = "KANN_TE_metrics_2L.xlsx"
+filenameTE_PRED_init_2L = "KANN_TE_HT_2L.xlsx"
+
+#Define the saved models that we want to test
+
+models = ["KANN_46_28_relu_Adam_10_100.h5", "KANN_46_28_linear_Adam_10_100.h5"]
+
+
+
+
+with pd.ExcelWriter(path_metrics + filenameTE_metrics_init_2L) as writerTE_2L:
+    with pd.ExcelWriter(path_results + filenameTE_PRED_init_2L) as writer_TE_PRED_2L:
+        for _model in models:
+
+
+
+            filesufix = str(_model)
+
+            filenameTE_sufix = " " + filesufix + ""
+
+            from keras.models import load_model
+
+            # load model
+            model = load_model(pathmodel + _model)
+
+            pred_TE = model.predict(features_normalized_test)
+            pred_TE_aprox = np.argmax(pred_TE, axis=-1)  # greater than 0.50 on scale 0 to 1
+
+            # Export  TE
+
+
+            TE_MOLN_TE_labels = pd.DataFrame(list(zip(mol_name_test, label_original_TE, Labels_TE_aprox)),
+                                             columns=["DRUG NAME", "Original_LABEL", "OBSERVED TE"])
+
+            TE_results = pd.DataFrame(data=pred_TE, index=None, columns=["BITTER", "SWEET", "TASTELESS"])
+
+            Pred_TE_aprox_db = pd.DataFrame(data=pred_TE_aprox, index=None, columns=["PREDICTED CLASS"+ filenameTE_sufix])
+
+            TE_results = pd.concat([TE_results, Pred_TE_aprox_db], axis=1, join='inner')
+
+
+
+
+            export_excel_TE = TE_results.to_excel(writer_TE_PRED_2L,
+                                                  startrow=startrow_PRED_TE_2L,
+                                                  startcol=startcol_PRED_TE_2L, index=False)
+
+
+
+            # Metrics_TE
+            # CLASSIFICATION REPORT WITH PRECISION, RECALL AND F1-SCORE - TR
+
+
+            Metrics_TE = metrics.classification_report(Labels_TE_aprox, pred_TE_aprox,
+                                                       digits=3, output_dict=True
+                                                       )
+
+            # Transpose metrics to panda.DF
+            df_TE_metrics = pd.DataFrame(Metrics_TE).transpose()
+            df_TE_metrics = pd.DataFrame(df_TE_metrics.values.reshape(1, -1), index = ["" + filesufix + ""])
+
+            # Export TR metrics
+            export_excel_TR_metrics = df_TE_metrics.to_excel(writerTE_2L, encoding='utf-8',
+                                                             startrow=startrowTE_2L,
+                                                             header=False)
+
+            startrowTE_2L += 1
+            startcol_PRED_TE_2L += 4
+
+print('******************* END **********************')
+print("END")
+
+# Places metric's names TE as header
+
+wb_TE = load_workbook(path_metrics + filenameTE_metrics_init_2L)
+sheet= wb_TE.active
+spec_cells_names = [3,8,13,18,23,28]
+add_columns_range = [2,7,12,17,22,27]
+metric_names = [2]
+for e in add_columns_range:
+    sheet.insert_cols(e)
+
+for i in spec_cells_names:
+    sheet.cell(row=1, column= i ).value = 'Precision'
+    sheet.cell(row=1, column=i+1).value = 'Recall'
+    sheet.cell(row=1, column=i+2).value = 'F1_score'
+    sheet.cell(row=1, column=i+3).value = 'support'
+    if i >= 18:
+        sheet.cell(row=1, column=i).value = 'BITTER'
+        sheet.cell(row=1, column=i + 1).value = 'SWEET'
+        sheet.cell(row=1, column=i + 2).value = 'TASTELESS'
+        sheet.cell(row=1, column=i + 3).value = 'Support'
+for f in metric_names:
+    sheet.cell(row=2, column=f).value = 'BITTER'
+    sheet.cell(row=2, column=f+5).value = 'SWEET'
+    sheet.cell(row=2, column=f+10).value = 'TASTELESS'
+    sheet.cell(row=2, column=f+15).value = 'accuracy'
+    sheet.cell(row=2, column=f+20).value = 'macro avg'
+    sheet.cell(row=2, column=f+25).value = 'weighted avg'
+
+wb_TE.save(path_metrics + filenameTE_metrics_init_2L)
+
+# Places the Drug Name and observed TR in XLS
+wb = xw.Book(path_results + filenameTE_PRED_init_2L)
+sht = wb.sheets['sheet1']
+sht.range("A1:D1").options(index=False, header=True).value = TE_MOLN_TE_labels
+wb.save(path_results + filenameTE_PRED_init_2L)
+# wb.close()
+
