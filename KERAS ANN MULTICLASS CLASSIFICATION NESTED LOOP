@@ -2,7 +2,8 @@
 import pandas as pd
 import tensorflow as tf
 import keras
-from tensorflow.keras import backend
+from tensorflow import keras
+
 from keras.wrappers.scikit_learn import KerasClassifier
 from keras.utils import np_utils
 from sklearn.model_selection import cross_val_score
@@ -11,7 +12,7 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.pipeline import Pipeline
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
+
 from sklearn.tree import export_graphviz
 from sklearn import metrics
 import pickle
@@ -26,6 +27,7 @@ from openpyxl import load_workbook
 import openpyxl
 from openpyxl import Workbook
 import xlwings as xw
+import h5py
 
 # fix random seed for reproducibility
 import random as rn
@@ -34,15 +36,14 @@ rn.seed(12345)
 
 
 # confirm TensorFlow sees the GPU
-pathmodel = "T:/OneDrive - Universidade de Lisboa/TRABALHO DE CAMPO/RESULTS_MODEL/"
+pathmodel = "D:/Python_DL_2020/KANN_Palatability/HT_saved_models/EDragon_dB/"
 
-pathdB = 'T:/OneDrive - Universidade de Lisboa/TRABALHO DE CAMPO/RESULTS_MODEL/HT_dB/'
-path_results = "T:/OneDrive - Universidade de Lisboa/TRABALHO DE CAMPO/RESULTS_MODEL/HT_results/"
-path_metrics = "T:/OneDrive - Universidade de Lisboa/TRABALHO DE CAMPO/RESULTS_MODEL/HT_metrics/"
+pathdB = 'D:/Python_DL_2020/KANN_Palatability/HT_dB/EDragon_dB/'
+path_results = "D:/Python_DL_2020/KANN_Palatability/HT_results/EDragon_dB/"
+path_metrics = "D:/Python_DL_2020/KANN_Palatability/HT_metrics/EDragon_dB/"
 
 
-filename_dB_normalized = "AS_S_database_Python_v2_norm.xlsx"
-filename_dB_Label_binarized = "AS_S_database_Python_v2_Label_binarized.xlsx"
+filename_dB_normalized = "EDragon_final_dB_Feature_red.xlsx"
 filenameTR_pred = "TR_ANN_HP.xlsx"
 filenameVAL_pred = "VAL_ANN_HP.xlsx"
 filenameTR_metrics = "TR_ANN_HP_metrics.xlsx"
@@ -62,12 +63,12 @@ mol_name_Norm_drop = features_norm.drop("MOL_NAME", axis=1, inplace=True)
 from sklearn.model_selection import train_test_split
 
 features_normalized_train, features_normalized_test, labels_train, labels_test, mol_name_train, mol_name_test = train_test_split(
-    features_norm, labels_bin, mol_name_norm, test_size=0.2, stratify=labels_bin, random_state=42)
+    features_norm, labels_bin, mol_name_norm, test_size=0.1, stratify=labels_bin, random_state=42)
 print(features_normalized_train.shape, labels_train.shape)
 print(features_normalized_test.shape, labels_test.shape)
 
 features_norm_train, features_normalized_val, labels_train_, labels_val, mol_name_train_, mol_name_val = train_test_split(
-    features_normalized_train, labels_train, mol_name_train, test_size=0.25, stratify=labels_train, random_state=42)
+    features_normalized_train, labels_train, mol_name_train, test_size=0.22, stratify=labels_train, random_state=42)
 print(features_normalized_val.shape, labels_val.shape)
 
 from sklearn.preprocessing import LabelBinarizer
@@ -100,28 +101,17 @@ filenameVAL_metrics_init_2L = "KANN_VAL_metrics_2L.xlsx"
 filenameTR_PRED_init_2L = "KANN_TR_HT_2L.xlsx"
 filenameVAL_PRED_init_2L = "KANN_VAL_HT_2L.xlsx"
 
-input_size = 926
-hidden_neurons_l1 = [10]
-hidden_neurons_l2 = [10]
+input_size = 550
+
+
+hidden_neurons_l1 = [20, 25, 30, 35, 45, 50]
+hidden_neurons_l2 = [10, 15, 20, 25, 30, 35, 45, 50]
 hidden_neurons_LastL = [3]
-activation = ['relu','softmax']
+activation = ['linear', 'softplus', 'softsign', 'tanh', 'sigmoid', 'hard_sigmoid', 'relu']
 activation_LastL = ["softmax"]
-optimizer = ['Adam']
-batch_size = [10, 50, 100]
-epochs = [10, 20, 40, 60, 80, 100]
-
-
-
-
-# input_size = 926
-# hidden_neurons_L1 = [1,10,20,30,50]
-# hidden_neurons_L2 = [1,10,20,30,50]
-# hidden_neurons_LastL = [3]
-# activation = ['relu','softmax', 'softplus', 'softsign', 'tanh', 'sigmoid', 'hard_sigmoid', 'linear']
-# activation_LastL = ["softmax"]
-# optimizer = ['Adam','SGD', 'RMSprop', 'Adagrad', 'Adadelta','Adamax', 'Nadam']
-# batch_size = [10, 20, 50, 100]
-# epochs = [5, 10, 50]
+optimizer = ['Adam','SGD', 'RMSprop', 'Adagrad', 'Adadelta','Adamax', 'Nadam']
+batch_size = [10, 20, 50, 100]
+epochs = [50, 100, 500, 1000]
 # kernel_initializer_L1= ["uniform"]
 # kernel_initializer_L2 = ["uniform"]
 # kernel_initializer_LastL = ["uniform"]
@@ -142,7 +132,7 @@ with pd.ExcelWriter(path_metrics + filenameTR_metrics_init_2L) as writerTR_2L:
 
                                         filenameTR_VAL_sufix = "" + filesufix + ""
 
-                                        filenameKANNmodel = 'KANN_' + filesufix + '.h5'
+                                        filenameKANNmodel = pathmodel + 'KANN_' + filesufix + '.h5'
                                         print('*************************')
                                         print(_hidden_neurons_l1, " / ", _hidden_neurons_l2, " / ", _activation, " / ",
                                               _optimizer, " / ", _batch_size, " / ", _epochs)
@@ -156,7 +146,7 @@ with pd.ExcelWriter(path_metrics + filenameTR_metrics_init_2L) as writerTR_2L:
                                             # Adding the input layer and first hidden layer
                                             model.add(keras.layers.Dense(units=_hidden_neurons_l1,
                                                                          activation=_activation,
-                                                                         input_dim=926
+                                                                         input_dim= input_size
                                                                          ))
 
                                             # Adding the Output Layer
@@ -205,15 +195,15 @@ with pd.ExcelWriter(path_metrics + filenameTR_metrics_init_2L) as writerTR_2L:
 
                                         # Metrics_TR
                                         # CLASSIFICATION REPORT WITH PRECISION, RECALL AND F1-SCORE - TR
-                                        target_names = ["BITTER", "SWEET", "TASTELESS"]
+
 
                                         Metrics_TR = metrics.classification_report(Labels_train_aprox, pred_train_aprox,
-                                                                                   digits=3, output_dict=True,
-                                                                                   target_names=target_names)
+                                                                                   digits=3, output_dict=True
+                                                                                   )
 
-                                        # Transpose metrics to panda.DF
+                                        ## Transpose metrics to panda.DF
                                         df_TR_metrics = pd.DataFrame(Metrics_TR).transpose()
-                                        df_TR_metrics[""]= filesufix
+                                        df_TR_metrics = pd.DataFrame(df_TR_metrics.values.reshape(1, -1), index = ["" + filesufix + ""])
 
                                         # Export TR metrics
                                         export_excel_TR_metrics = df_TR_metrics.to_excel(writerTR_2L, encoding='utf-8',
@@ -237,22 +227,24 @@ with pd.ExcelWriter(path_metrics + filenameTR_metrics_init_2L) as writerTR_2L:
 
                                         # CLASSIFICATION REPORT WITH PRECISION, RECALL AND F1-SCORE - VAL
 
-                                        target_names=["BITTER", "SWEET", "TASTELESS"]
 
-                                        Metrics_VAL = metrics.classification_report(Labels_val_aprox, pred_val_aprox, digits=3, output_dict=True, target_names = target_names )
 
-                                        #Transpose metrics to panda.DF
+                                        Metrics_VAL = metrics.classification_report(Labels_val_aprox, pred_val_aprox, digits=3, output_dict=True )
+
+                                        # Transpose metrics to panda.DF
                                         df_VAL_metrics = pd.DataFrame(Metrics_VAL).transpose()
-                                        df_VAL_metrics[""] = filesufix
+                                        df_VAL_metrics = pd.DataFrame(df_VAL_metrics.values.reshape(1, -1),
+                                                                      index=["" + filesufix + ""])
+
                                         ##Export TR metrics
                                         export_excel_VAL_metrics = df_VAL_metrics.to_excel (writerVAL_2L ,encoding='utf-8', startrow=startrowVAL_2L, header=False)
 
                                         # Saves model
 
-                                        #model.save('KANN_' + filesufix + '.h5')
+                                        model.save(filenameKANNmodel)
 
-                                        startrowTR_2L += 6
-                                        startrowVAL_2L += 6
+                                        startrowTR_2L += 1
+                                        startrowVAL_2L += 1
                                         startcol_PRED_TR_2L += 1
                                         startcol_PRED_VAL_2L += 1
 
@@ -260,23 +252,63 @@ print('******************* END **********************')
 print("END")
 
 # Places metric's names TR as header
-wb = load_workbook(path_metrics + filenameTR_metrics_init_2L)
-sheet = wb.active
-sheet.cell(row=1, column=2).value = 'Precision'
-sheet.cell(row=1, column=3).value = 'Recall'
-sheet.cell(row=1, column=4).value = 'F1_score'
-sheet.cell(row=1, column=5).value = 'support'
-wb.save(path_metrics + filenameTR_metrics_init_2L)
+wb_TR = load_workbook(path_metrics + filenameTR_metrics_init_2L)
+sheet= wb_TR.active
+spec_cells_names = [3,8,13,18,23,28]
+add_columns_range = [2,7,12,17,22,27]
+metric_names = [2]
+for e in add_columns_range:
+    sheet.insert_cols(e)
+
+for i in spec_cells_names:
+    sheet.cell(row=1, column= i ).value = 'Precision'
+    sheet.cell(row=1, column=i+1).value = 'Recall'
+    sheet.cell(row=1, column=i+2).value = 'F1_score'
+    sheet.cell(row=1, column=i+3).value = 'support'
+    if i >= 18:
+        sheet.cell(row=1, column=i).value = 'BITTER'
+        sheet.cell(row=1, column=i + 1).value = 'SWEET'
+        sheet.cell(row=1, column=i + 2).value = 'TASTELESS'
+        sheet.cell(row=1, column=i + 3).value = 'Support'
+for f in metric_names:
+    sheet.cell(row=2, column=f).value = 'BITTER'
+    sheet.cell(row=2, column=f+5).value = 'SWEET'
+    sheet.cell(row=2, column=f+10).value = 'TASTELESS'
+    sheet.cell(row=2, column=f+15).value = 'accuracy'
+    sheet.cell(row=2, column=f+20).value = 'macro avg'
+    sheet.cell(row=2, column=f+25).value = 'weighted avg'
+
+wb_TR.save(path_metrics + filenameTR_metrics_init_2L)
+
 
 # Places metric's names VAl as header
 
-wb = load_workbook(path_metrics + filenameVAL_metrics_init_2L)
-sheet = wb.active
-sheet.cell(row=1, column=2).value = 'Precision'
-sheet.cell(row=1, column=3).value = 'Recall'
-sheet.cell(row=1, column=4).value = 'F1_score'
-sheet.cell(row=1, column=5).value = 'support'
-wb.save(path_metrics + filenameVAL_metrics_init_2L)
+wb_val = load_workbook(path_metrics + filenameVAL_metrics_init_2L)
+sheet = wb_val.active
+spec_cells_names = [3,8,13,18,23,28]
+add_columns_range = [2,7,12,17,22,27]
+metric_names = [2]
+for e in add_columns_range:
+    sheet.insert_cols(e)
+for i in spec_cells_names:
+    sheet.cell(row=1, column= i ).value = 'Precision'
+    sheet.cell(row=1, column=i+1).value = 'Recall'
+    sheet.cell(row=1, column=i+2).value = 'F1_score'
+    sheet.cell(row=1, column=i+3).value = 'support'
+    if i >= 18:
+        sheet.cell(row=1, column=i).value = 'BITTER'
+        sheet.cell(row=1, column=i + 1).value = 'SWEET'
+        sheet.cell(row=1, column=i + 2).value = 'TASTELESS'
+        sheet.cell(row=1, column=i + 3).value = 'Support'
+for f in metric_names:
+    sheet.cell(row=2, column=f).value = 'BITTER'
+    sheet.cell(row=2, column=f+5).value = 'SWEET'
+    sheet.cell(row=2, column=f+10).value = 'TASTELESS'
+    sheet.cell(row=2, column=f+15).value = 'accuracy'
+    sheet.cell(row=2, column=f+20).value = 'macro avg'
+    sheet.cell(row=2, column=f+25).value = 'weighted avg'
+
+wb_val.save(path_metrics + filenameVAL_metrics_init_2L)
 
 # Places the Drug Name and observed TR in XLS
 wb = xw.Book(path_results + filenameTR_PRED_init_2L)
@@ -293,3 +325,4 @@ sht.range("A1:B1").options(index=False, header=True).value = VAL_MOLN_VAL_labels
 wb.save(path_results + filenameVAL_PRED_init_2L)
 
 # wb.close()
+
