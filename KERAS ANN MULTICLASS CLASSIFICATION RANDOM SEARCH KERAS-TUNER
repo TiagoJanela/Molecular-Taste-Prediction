@@ -53,10 +53,8 @@ filenameVAL_metrics="VAL_ANN_HP_metrics.xlsx"
 
 features_norm = pd.read_excel(path_results+filename_dB_normalized)
 
-
 labels_bin = features_norm['TASTE']
 labels_bin_drop = features_norm.drop("TASTE", axis=1, inplace=True)
-
 
 mol_name_norm = features_norm["MOL_NAME"]
 mol_name_Norm_drop = features_norm.drop("MOL_NAME", axis=1, inplace=True)
@@ -104,6 +102,7 @@ def build_model(hp): # random search passes this hyperparameter() object
                                'linear'
                            ])
     # Adding the input layer and first hidden layer
+    
     model.add(keras.layers.Dense(units= hp.Int("input_units", min_value=10, max_value=50, step=2),
                                  activation=activation,
                                  input_dim= 926
