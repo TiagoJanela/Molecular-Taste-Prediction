@@ -3,7 +3,6 @@ import pandas as pd
 import tensorflow as tf
 import keras
 from tensorflow import keras
-
 from keras.wrappers.scikit_learn import KerasClassifier
 from keras.utils import np_utils
 from sklearn.model_selection import cross_val_score
@@ -12,7 +11,6 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.pipeline import Pipeline
 import numpy as np
 import pandas as pd
-
 from sklearn.tree import export_graphviz
 from sklearn import metrics
 import pickle
@@ -126,6 +124,7 @@ with pd.ExcelWriter(path_metrics + filenameTR_metrics_init_2L) as writerTR_2L:
                             for _optimizer in optimizer:
                                 for _batch_size in batch_size:
                                     for _epochs in epochs:
+                                    
                                         filesufix = str(_hidden_neurons_l1) + "_" + str(_hidden_neurons_l2) + "_" + str(
                                         _activation) + "_" + str(_optimizer) + "_" + str(_batch_size) + "_" + str(
                                         _epochs)
@@ -133,6 +132,7 @@ with pd.ExcelWriter(path_metrics + filenameTR_metrics_init_2L) as writerTR_2L:
                                         filenameTR_VAL_sufix = "" + filesufix + ""
 
                                         filenameKANNmodel = pathmodel + 'KANN_' + filesufix + '.h5'
+                                        
                                         print('*************************')
                                         print(_hidden_neurons_l1, " / ", _hidden_neurons_l2, " / ", _activation, " / ",
                                               _optimizer, " / ", _batch_size, " / ", _epochs)
