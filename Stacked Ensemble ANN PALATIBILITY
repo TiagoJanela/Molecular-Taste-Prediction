@@ -30,6 +30,7 @@ import h5py
 
 # fix random seed for reproducibility
 import random as rn
+
 np.random.seed(42)
 rn.seed(12345)
 
